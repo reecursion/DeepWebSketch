@@ -1,9 +1,9 @@
-# DeepWebSketch:  🖌️
+# 🖌️ DeepWebSketch
 
 DeepWebSketch is an innovative web application that converts hand-drawn sketches into working HTML/CSS code using AI. Draw your UI design or upload a sketch, and watch as it transforms into functional web code in real-time.
 
 Built during the TartanHacks 2025 Hackathon by team WrapperAI! 
-Team members: Manav Kapadnis, 
+Team members: Manav Kapadnis, Gayathri Ganesh Lakshmy, Dhruv Gupta, Lawanya Baghel 
 
 ## Features
 
