@@ -1,3 +1,5 @@
+import base64
+import io
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
@@ -9,6 +11,29 @@ from huggingface_hub import InferenceClient
 st.set_page_config(layout="wide")
 
 st.title("🖌️ Sketch2Web")
+
+def optimize_image(image, max_size=(512, 512), quality=60):
+    """
+    Optimize image by resizing and compressing it
+    """
+    # Convert to RGB if image is in RGBA mode
+    if image.mode == 'RGBA':
+        image = image.convert('RGB')
+    
+    # Calculate aspect ratio-preserving dimensions
+    img_width, img_height = image.size
+    ratio = min(max_size[0]/img_width, max_size[1]/img_height)
+    new_size = (int(img_width*ratio), int(img_height*ratio))
+    
+    # Resize image using older PIL syntax
+    image = image.resize(new_size, Image.LANCZOS)
+    
+    # Save with compression
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='JPEG', quality=quality, optimize=True)
+    img_byte_arr.seek(0)
+    
+    return img_byte_arr
 
 # ---- Layout Columns ----
 col1, col2 = st.columns([2, 1])  
@@ -67,18 +92,45 @@ with col1:
                 api_key=HF_API_KEY
             )
 
+            # Process canvas image if available
+            image_prompt = ""
+            if whiteboard.image_data is not None:
+                # Convert numpy array to PIL Image and optimize
+                pil_image = Image.fromarray(whiteboard.image_data)
+                optimized_img_bytes = optimize_image(pil_image)
+                img_base64 = base64.b64encode(optimized_img_bytes.getvalue()).decode()
+                image_prompt = f"![Canvas Sketch](data:image/jpeg;base64,{img_base64})\n\n"
+                
+                
+                img_bytes = base64.b64decode(img_base64)
+
+                # Create PIL Image from bytes
+                img = Image.open(io.BytesIO(img_bytes))
+
+                # Save as PNG
+                img.save('output_image.png', 'PNG')
+
+            # Process uploaded image if available
+            elif uploaded_file:
+                pil_image = Image.open(uploaded_file)
+                optimized_img_bytes = optimize_image(pil_image)
+                img_base64 = base64.b64encode(optimized_img_bytes.getvalue()).decode()
+                image_prompt = f"![Uploaded Sketch](data:image/jpeg;base64,{img_base64})\n\n"
+
+
+
             # Chat prompt for UI generation
             messages = [
                 {
                     "role": "user",
-                    "content": f"Generate HTML and CSS based on this user request: {user_input}. Give output in the format of [HTML]: <html code> [CSS]: <css code>"
+                    "content": f"{image_prompt} Generate HTML and CSS based on this sketch and user request: {user_input}. Give output in the format of [HTML]: <html code> [CSS]: <css code>"
                 }
             ]
 
             # Request AI-generated code
             try:
                 completion = client.chat.completions.create(
-                    model="meta-llama/Llama-3.3-70B-Instruct",
+                    model="meta-llama/Llama-3.2-11B-Vision-Instruct",
                     messages=messages,
                     max_tokens=500
                 )
