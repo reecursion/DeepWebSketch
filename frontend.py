@@ -7,6 +7,9 @@ import tempfile
 import os
 from streamlit_drawable_canvas import st_canvas
 from huggingface_hub import InferenceClient
+import cv2
+from streamlit_ace import st_ace
+import re
 
 st.set_page_config(layout="wide")
 
@@ -36,21 +39,25 @@ def optimize_image(image, max_size=(512, 512), quality=60):
     return img_byte_arr
 
 # ---- Layout Columns ----
-col1, col2 = st.columns([2, 1])  
+col0, col1, col2 = st.columns([1, 3, 2], gap="medium")  
+
+with col0:
+    st.subheader("Brush Settings")
+
+    drawing_mode = st.selectbox(
+        "Drawing tool:",
+        ("freedraw", "line", "rect", "circle", "transform", "polygon", "point"),
+    )
+    stroke_width = st.slider("Stroke width: ", 1, 25, 3)
+    if drawing_mode == "point":
+        point_display_radius = st.slider("Point display radius: ", 1, 25, 3)
+    stroke_color = st.color_picker("Stroke color hex: ")
+    realtime_update = st.checkbox("Update in realtime", True)
+
 
 # ---- LEFT COLUMN (Whiteboard & Upload) ----
 with col1:
     st.subheader("🎨 Draw Your UI or Upload a Sketch")
-
-    drawing_mode = st.sidebar.selectbox(
-        "Drawing tool:",
-        ("freedraw", "line", "rect", "circle", "transform", "polygon", "point"),
-    )
-    stroke_width = st.sidebar.slider("Stroke width: ", 1, 25, 3)
-    if drawing_mode == "point":
-        point_display_radius = st.sidebar.slider("Point display radius: ", 1, 25, 3)
-    stroke_color = st.sidebar.color_picker("Stroke color hex: ")
-    realtime_update = st.sidebar.checkbox("Update in realtime", True)
 
     # Placeholder for a whiteboard
     whiteboard = st_canvas(
@@ -62,7 +69,6 @@ with col1:
         height=400,
         drawing_mode=drawing_mode,
         point_display_radius=point_display_radius if drawing_mode == "point" else 0,
-        display_toolbar=st.sidebar.checkbox("Display toolbar", True),
         key="full_app",
     )
     
@@ -88,27 +94,17 @@ with col1:
 
             # Initialize Hugging Face Inference Client with Together AI
             client = InferenceClient(
-                # provider="together",
                 api_key=HF_API_KEY
             )
 
             # Process canvas image if available
             image_prompt = ""
             if whiteboard.image_data is not None:
-                # Convert numpy array to PIL Image and optimize
-                pil_image = Image.fromarray(whiteboard.image_data)
-                optimized_img_bytes = optimize_image(pil_image)
-                img_base64 = base64.b64encode(optimized_img_bytes.getvalue()).decode()
-                image_prompt = f"![Canvas Sketch](data:image/jpeg;base64,{img_base64})\n\n"
-                
-                
-                img_bytes = base64.b64decode(img_base64)
-
-                # Create PIL Image from bytes
-                img = Image.open(io.BytesIO(img_bytes))
-
-                # Save as PNG
-                img.save('output_image.png', 'PNG')
+                cv2.imwrite(f"img.jpg",  whiteboard.image_data)
+                image = None 
+                with open("img.jpg", "rb") as f:
+                    image = base64.b64encode(f.read()).decode("utf-8")
+                image_prompt = f"![Canvas Sketch](data:image/jpeg;base64,{image})\n\n"
 
             # Process uploaded image if available
             elif uploaded_file:
@@ -123,7 +119,7 @@ with col1:
             messages = [
                 {
                     "role": "user",
-                    "content": f"{image_prompt} Generate HTML and CSS based on this sketch and user request: {user_input}. Give output in the format of [HTML]: <html code> [CSS]: <css code>"
+                    "content": f"{image_prompt} Generate HTML and CSS based on this sketch and user request: {user_input}. Provide the code using blocks of triple backticks. Respond with only the code in HTML and CSS, nothing else."
                 }
             ]
 
@@ -137,17 +133,19 @@ with col1:
 
                 # Extract generated text
                 generated_text = completion.choices[0].message["content"]
+                print(generated_text)
 
-                # # Split the generated text into HTML and CSS
-                # if "<style>" in generated_text and "</style>" in generated_text:
-                #     html_part, css_part = generated_text.split("<style>", 1)
-                #     css_part = "<style>" + css_part
-                # else:
-                #     html_part = generated_text
-                #     css_part = ""
+                html_pattern = r"\`\`\`html\s*(.*?)\`\`\`"
+                css_pattern = r"\`\`\`css\s*(.*?)\`\`\`"
 
+                html_match = re.search(html_pattern, generated_text, re.DOTALL)
+                css_match = re.search(css_pattern, generated_text, re.DOTALL)
+                
                 # Store in session state
-                st.session_state["html_code"] = generated_text
+                st.session_state["html_code"] = html_match.group(1).strip() if html_match else ""
+                st.session_state["css_code"] = css_match.group(1).strip() if css_match else ""
+                if not html_match and not css_match:
+                    st.warning("Could not parse HTML or CSS from the generated text. Please try again.")
 
             except Exception as e:
                 st.error(f"Error: {str(e)}")
@@ -164,16 +162,50 @@ with col2:
             "📜 HTML Code", 
             value=st.session_state.get("html_code", ""), 
             placeholder="""Your HTML Code""", 
-            height=250
+            height=500
         )
+
+        # html_code = st_ace(
+        #     value=st.session_state.get("html_code", ""),
+        #     language="html",
+        #     theme="monokai",
+        #     key="html_editor",
+        #     placeholder="Your HTML Code",
+        #     height=500,
+        #     font_size=14,
+        #     wrap=True,
+        #     show_gutter=True,
+        #     show_print_margin=False,
+        #     annotations=None,
+        #     keybinding="vscode",
+        #     min_lines=20,
+        #     auto_update=True,
+        # )
 
     with tab2:
         css_code = st.text_area(
             "🎨 CSS Code", 
             value=st.session_state.get("css_code", ""), 
-            height=250,
+            height=500,
             placeholder="""Your CSS Code"""
         )
+
+        # css_code = st_ace(
+        #     value=st.session_state.get("css_code", ""),
+        #     language="css",
+        #     theme="monokai",
+        #     key="css_editor",
+        #     placeholder="Your CSS Code",
+        #     height=500,
+        #     font_size=14,
+        #     wrap=True,
+        #     show_gutter=True,
+        #     show_print_margin=False,
+        #     annotations=None,
+        #     keybinding="vscode",
+        #     min_lines=20,
+        #     auto_update=True,
+        # )
 
 st.subheader("🌐 Live Preview (Full Width)")
 
