@@ -1,2 +1,5 @@
 streamlit
 pillow
+streamlit-drawable-canvas
+svgpathtools
+transformers
