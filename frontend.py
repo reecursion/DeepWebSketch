@@ -111,16 +111,7 @@ with col2:
         html_code = st.text_area(
             "📜 HTML Code", 
             value=st.session_state.get("html_code", ""), 
-            placeholder="""<!DOCTYPE html>
-<html>
-<head>
-    <title>Hello World</title>
-    <link rel="stylesheet" type="text/css" href="style.css">
-</head>
-<body>
-    <h1 class="hello-world">Hello World</h1>
-</body>
-</html>""", 
+            placeholder="""Your HTML Code""", 
             height=250
         )
 
@@ -129,11 +120,7 @@ with col2:
             "🎨 CSS Code", 
             value=st.session_state.get("css_code", ""), 
             height=250,
-            placeholder=""".hello-world {
-    color: blue;
-    font-size: 36px;
-    text-align: center;
-}"""
+            placeholder="""Your CSS Code"""
         )
 
 st.subheader("🌐 Live Preview (Full Width)")
@@ -152,25 +139,50 @@ st.subheader("🌐 Live Preview (Full Width)")
 # </html>
 # """
 
-full_code = """<!DOCTYPE html>
+
+# Define a static example before AI-generated code is available
+default_html = """
+<!DOCTYPE html>
 <html>
 <head>
-    <title>Hello World</title>
-    <link rel="stylesheet" type="text/css" href="style.css">
+<style>
+h1 {
+    color: black;
+    text-align: center;
+    font-family: Arial, sans-serif;
+}
+</style>
 </head>
 <body>
-    <h1 class="hello-world">Hello World</h1>
+    <h1>Hello, World!</h1>
 </body>
-</html>"""
+</html>
+"""
 
+# Use AI-generated content if available
+html_code = st.session_state.get("html_code", "<h1>Hello, World!</h1>")
+css_code = st.session_state.get("css_code", "h1 { color: blue; }")
 
-print(full_code)
+full_code = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+{css_code}
+</style>
+</head>
+<body>
+{html_code}
+</body>
+</html>
+""" if "html_code" in st.session_state else default_html
 
-# Create a temporary file to store generated code
-with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as temp_file:
-    temp_file.write(full_code.encode("utf-8"))
+# Ensure the temporary file is written correctly
+with tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode="w", encoding="utf-8") as temp_file:
+    temp_file.write(full_code)
     temp_file_path = temp_file.name
 
-# Display the generated website using an iframe (now full-width)
-components.iframe(f"file://{temp_file_path}", height=500, scrolling=True)
-# components.iframe(f"https://www.google.com/", height=500, scrolling=True)
+with open(temp_file_path, "r", encoding="utf-8") as file:
+    html_content = file.read()
+
+st.components.v1.html(html_content, height=500, scrolling=True)
